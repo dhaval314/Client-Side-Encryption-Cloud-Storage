@@ -1,9 +1,9 @@
 import requests
 
-file_path = "/home/dhaval/Desktop/CTF tools"
-upload_endpoint = "http://localhost:8000/upload"
-download_endpoint = "http://localhost:8000/download"
-download_path = "/home/dhaval/Downloads"
+file_path = "/home/rituparnpant/Downloads/discord-0.0.122.deb"
+upload_endpoint = "http://10.80.231.252:8000/upload"
+download_endpoint = "http://10.80.231.252:8000/download"
+download_path = "/home/rituparnpant/Downloads/"
 
 
 def upload(user_id):
@@ -23,10 +23,10 @@ def download(user_id, file_id, download_path):
             for chunk in response.iter_content(chunk_size=1024):
                 f.write(chunk)
         print(response.status_code)
-        print(response.text)
+        
     except Exception as e:
         print(f"Error: {e}")
     
     
 
-upload(5)
+download(1, "test", download_path)

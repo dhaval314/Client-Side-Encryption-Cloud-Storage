@@ -24,7 +24,10 @@ async def upload(user_id, encrypted_file_key: str = Form(...), file: UploadFile 
     async with aiofiles.open(f"{storage_path}/{user_id}/{file_uuid}/{file_name}", mode= "wb") as f:
         while content := await file.read(1024):
             await f.write(content)
-    print(encrypted_file_key)
+    
+    with open(f"{storage_path}/{user_id}/{file_uuid}/key.txt", "w") as key_file:
+        key_file.write(encrypted_file_key)
+
     return {
         "file_uuid": file_uuid
     }

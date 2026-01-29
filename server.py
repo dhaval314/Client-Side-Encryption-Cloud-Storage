@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 import aiofiles
 import aiofiles.os
@@ -10,24 +10,23 @@ app = FastAPI()
 
 username = getpass.getuser()
 storage_path = "/home/dhaval/storage"
-download_path = f"/home/{username}/Downloads"
+
+    
 
 @app.post("/upload/{user_id}")
-async def upload(user_id, file: UploadFile = File(...)):
+async def upload(user_id, encrypted_file_key: str = Form(...), file: UploadFile = File(...)):
+    os.makedirs(f"{storage_path}/{user_id}", exist_ok=True)
 
-    try:
-        await aiofiles.os.makedirs(f"{storage_path}/{user_id}")
-    except:
-        print(f"Directory for user: {user_id} already exists")
-
-
-    async with aiofiles.open(f"{storage_path}/{user_id}/{file.filename}", mode= "wb") as f:
+    file_name = file.filename
+    # if os.path.isfile(f"{storage_path}/{user_id}/{file.filename}"):
+    async with aiofiles.open(f"{storage_path}/{user_id}/{file_name}", mode= "wb") as f:
         while content := await file.read(1024):
             await f.write(content)
-    return {
-        "filename":file.filename,
-        "file_size":file.size
-    }
+    print(encrypted_file_key)
+    # return {
+    #     "filename":file.filename,
+    #     "file_size":file.size
+    # }
 
 
 

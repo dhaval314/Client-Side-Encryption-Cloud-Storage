@@ -1,28 +1,38 @@
 import requests
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.fernet import Fernet
+import hashlib
+import base64
 
 
-file_path = "/home/dhaval/Desktop/CTF tools"
+file_path = "/home/dhaval/Desktop/test"
 upload_endpoint = "http://localhost:8000/upload"
 download_endpoint = "http://localhost:8000/download"
 download_path = "/home/dhaval/Downloads"
+passphrase = "abcd"
+master_key = base64.urlsafe_b64encode(hashlib.sha256(passphrase.encode("utf-8")).digest())
 
-def encrypt(file): # user_id is used as AAD (Additional Authenticated Data)
-    key = os.urandom(32)
+
+def encrypt(file):
+    file_key = os.urandom(32)
     nonce = os.urandom(12)
-    encryptor = Cipher(algorithms.AES(key), modes.GCM(nonce)).encryptor()
-    
-    output_file = file_path + ".enc"
+
+    encryptor = Cipher(
+        algorithms.AES(file_key),
+        modes.GCM(nonce)
+    ).encryptor()
+
+    output_file = file + ".enc"
+
     with open(file, "rb") as f_in, open(output_file, "wb") as f_out:
         while chunk := f_in.read(64 * 1024):
             f_out.write(encryptor.update(chunk))
         encryptor.finalize()
-        meta_data = nonce + encryptor.tag
-        f_out.write(meta_data)
-    print(key)
+        f_out.write(nonce + encryptor.tag)
 
-    return key
+    return file_key, output_file
+
 
 def decrypt(encrypted_file, key):
     file_size = os.path.getsize(encrypted_file)
@@ -43,7 +53,6 @@ def decrypt(encrypted_file, key):
         
         decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
         
-        
         output_path = encrypted_file.replace(".enc", ".dec")
         with open(output_path, "wb") as f_out:
             f_out.write(decrypted_data)
@@ -54,17 +63,31 @@ def decrypt(encrypted_file, key):
         raise ValueError("Decryption failed: Data tampered with or wrong parameters.") from e
     
 def upload(user_id):
+    file_key, encrypted_file_path = encrypt(file_path)
 
-    key = encrypt(file_path)
+    cipher_suite = Fernet(master_key)
+    encrypted_file_key = cipher_suite.encrypt(file_key).decode("utf-8")
 
-    with open(f"{file_path}.enc", "rb") as f:
+    with open(encrypted_file_path, "rb") as f:
         files = {
-            "file": (file_path.split("/")[-1], f)
+            "file": (os.path.basename(encrypted_file_path), f)
         }
-        r = requests.post(upload_endpoint + "/" + str(user_id), files=files)
+        data = {
+            "encrypted_file_key": encrypted_file_key
+        }
+
+        r = requests.post(
+            f"{upload_endpoint}/{user_id}",
+            files=files,
+            data=data
+        )
+
 
     print(r.status_code)
     print(r.text)
+
+
+upload(1)
 
 def download(user_id, file_id, download_path):
     try:
@@ -73,10 +96,10 @@ def download(user_id, file_id, download_path):
             for chunk in response.iter_content(chunk_size=1024):
                 f.write(chunk)
         print(response.status_code)
-        
+        print(response.text)
     except Exception as e:
         print(f"Error: {e}")
     
     
 
-upload(5)
+

@@ -81,10 +81,9 @@ def upload(user_id):
             files=files,
             data=data
         )
-
-
     print(r.status_code)
     print(r.text)
+    
 
 
 upload(1)

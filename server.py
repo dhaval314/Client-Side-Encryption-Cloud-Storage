@@ -4,7 +4,7 @@ import aiofiles
 import aiofiles.os
 import os
 import getpass
-
+import uuid
 
 app = FastAPI()
 
@@ -15,18 +15,19 @@ storage_path = "/home/dhaval/storage"
 
 @app.post("/upload/{user_id}")
 async def upload(user_id, encrypted_file_key: str = Form(...), file: UploadFile = File(...)):
-    os.makedirs(f"{storage_path}/{user_id}", exist_ok=True)
+    file_uuid = uuid.uuid4()
+
+    os.makedirs(f"{storage_path}/{user_id}/{file_uuid}", exist_ok=True)
 
     file_name = file.filename
-    # if os.path.isfile(f"{storage_path}/{user_id}/{file.filename}"):
-    async with aiofiles.open(f"{storage_path}/{user_id}/{file_name}", mode= "wb") as f:
+
+    async with aiofiles.open(f"{storage_path}/{user_id}/{file_uuid}/{file_name}", mode= "wb") as f:
         while content := await file.read(1024):
             await f.write(content)
     print(encrypted_file_key)
-    # return {
-    #     "filename":file.filename,
-    #     "file_size":file.size
-    # }
+    return {
+        "file_uuid": file_uuid
+    }
 
 
 

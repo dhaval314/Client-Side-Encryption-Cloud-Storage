@@ -5,6 +5,7 @@ import aiofiles.os
 import os
 import getpass
 import uuid
+from pathlib import Path
 
 app = FastAPI()
 
@@ -27,18 +28,20 @@ async def upload(user_id, encrypted_file_key: str = Form(...), file: UploadFile 
     
     with open(f"{storage_path}/{user_id}/{file_uuid}/key.txt", "w") as key_file:
         key_file.write(encrypted_file_key)
-
-    return {
-        "file_uuid": file_uuid
-    }
+    
+    return file_uuid
 
 
 
-@app.get("/download/{user_id}/{file_id}")
-async def download(user_id, file_id):
-
+@app.get("/download_file/{user_id}/{file_id}")
+async def download_file(user_id, file_id):
+    p = Path(f"{storage_path}/{user_id}/{file_id}")
+    file_name = None
+    for item in p.iterdir():
+        if item.name != "key.txt":
+            file_name = item.name
     def file_iterator():
-        with open(f"{storage_path}/{user_id}/{file_id}", "rb") as file:
+        with open(f"{storage_path}/{user_id}/{file_id}/{file_name}", "rb") as file:
             while chunk := file.read(1024):
                 yield chunk
     
@@ -46,3 +49,8 @@ async def download(user_id, file_id):
         file_iterator()
     )
         
+@app.get("/download_key/{user_id}/{file_id}")
+async def download_key(user_id, file_id):
+    with open(f"{storage_path}/{user_id}/{file_id}/key.txt") as f:
+        key_text = f.read()
+    return key_text

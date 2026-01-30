@@ -4,17 +4,21 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.fernet import Fernet
 import hashlib
 import base64
+import json
+from datetime import datetime, timezone
 
 
-file_path = "/home/dhaval/Desktop/test"
+file_path = "/home/dhaval/Desktop/testfile.txt"
 upload_endpoint = "http://localhost:8000/upload"
-download_endpoint = "http://localhost:8000/download"
+download_file_endpoint = "http://localhost:8000/download_file"
+download_key_endpoint = "http://localhost:8000/download_key"
 download_path = "/home/dhaval/Downloads"
 passphrase = "abcd"
 master_key = base64.urlsafe_b64encode(hashlib.sha256(passphrase.encode("utf-8")).digest())
 
+filename = os.path.basename(file_path)
 
-def encrypt(file):
+def encrypt(file, duplicate = False, new_file_name = None):
     file_key = os.urandom(32)
     nonce = os.urandom(12)
 
@@ -22,10 +26,16 @@ def encrypt(file):
         algorithms.AES(file_key),
         modes.GCM(nonce)
     ).encryptor()
-
     output_file = file + ".enc"
-
+    '''
+    # If duplicate exists, then a numbered file name will be created
+    if not duplicate:
+        output_file = file + ".enc"
+    else:
+        output_file = new_file_name + ".enc"
+    '''
     with open(file, "rb") as f_in, open(output_file, "wb") as f_out:
+        
         while chunk := f_in.read(64 * 1024):
             f_out.write(encryptor.update(chunk))
         encryptor.finalize()
@@ -33,6 +43,24 @@ def encrypt(file):
 
     return file_key, output_file
 
+# Function to create a numbered file name if the file already exists on the server
+def newfilename(curr):
+    name, ext = os.path.splitext(curr)
+    name_list = name.split("-")
+    
+    try:
+        new_num = int(name_list[-1]) + 1
+        new_name = name[:len(name) - len(name_list[-1])]
+        return f"{new_name}{new_num}{ext}"
+    except:
+        return f"{name}-1{ext}"
+
+# Get the hash value of the file
+def get_file_hash(file):
+    with open(file, "rb") as f:
+        digest = hashlib.file_digest(f, "sha256")
+        file_hash = digest.hexdigest()
+    return file_hash
 
 def decrypt(encrypted_file, key):
     file_size = os.path.getsize(encrypted_file)
@@ -59,10 +87,24 @@ def decrypt(encrypted_file, key):
             
         return output_path
     except Exception as e:
-        
         raise ValueError("Decryption failed: Data tampered with or wrong parameters.") from e
     
 def upload(user_id):
+    # Load the json file containing all the file name to uuid and file hash mappings
+    with open("uploaded_files.json", "r") as file:
+        uploaded_files = json.load(file)
+
+    # Get the file hash
+    file_hash = get_file_hash(file_path)
+    
+    
+
+    # 
+    if filename in uploaded_files and uploaded_files[filename]["hash"] == file_hash:
+        print(f"[-] File: {filename} already exists")
+        return
+
+    # 
     file_key, encrypted_file_path = encrypt(file_path)
 
     cipher_suite = Fernet(master_key)
@@ -70,7 +112,7 @@ def upload(user_id):
 
     with open(encrypted_file_path, "rb") as f:
         files = {
-            "file": (os.path.basename(encrypted_file_path), f)
+            "file": (filename, f)
         }
         data = {
             "encrypted_file_key": encrypted_file_key
@@ -81,24 +123,61 @@ def upload(user_id):
             files=files,
             data=data
         )
-    print(r.status_code)
-    print(r.text)
-    
 
+    # Remove the .enc file created after it is sent to the server
+    os.remove(f"{file_path}.enc")
 
-upload(1)
+    print(f"[+] File: {filename} successfully uploaded")
 
-def download(user_id, file_id, download_path):
+    # Add the newly uploaded file's mapping and store it
+    file_uuid_mapping = {filename:
+                            { 
+                                "uuid": r.text[1:-1],
+                                "hash": file_hash,
+                                "uploaded_at": datetime.now(timezone.utc).isoformat()
+                            }
+                        }
+    uploaded_files.update(file_uuid_mapping)
+
+    with open("uploaded_files.json","w") as file:
+        json.dump(uploaded_files, file, indent=4)
+
+#upload(1)
+
+def download(user_id, file_name, download_path):
+
+    with open("uploaded_files.json", "r") as file:
+        uploaded_files = json.load(file)
+
+    file_id = uploaded_files[file_name]["uuid"]
     try:
-        response = requests.get(f"{download_endpoint}/{user_id}/{file_id}", stream=True)
-        with open(f"{download_path}/{file_id}", "wb") as f:
+        response = requests.get(f"{download_file_endpoint}/{user_id}/{file_id}", stream=True)
+        with open(f"{download_path}/{file_name}", "wb") as f:
             for chunk in response.iter_content(chunk_size=1024):
                 f.write(chunk)
         print(response.status_code)
-        print(response.text)
+
+        # Retrieve the encrypted file key
+        r = requests.get(f"{download_key_endpoint}/{user_id}/{file_id}")
+        encrypted_file_key = r.text[1:-1]
+
+        # Decrypt the encrypted file key
+        cipher_suite = Fernet(master_key)
+        decrypted_file_key = cipher_suite.decrypt(encrypted_file_key)
+        
+        # Decrypt the encrypted file
+        decrypt(f"{download_path}/{file_name}", decrypted_file_key)
+        print(f"[+] Successfully downloaded file: {file_name}")
+
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"[-] Error: {e}")
     
+    
+
+
+
+
+
     
 
 

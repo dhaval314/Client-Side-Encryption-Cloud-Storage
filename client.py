@@ -7,14 +7,15 @@ import base64
 import json
 from datetime import datetime, timezone
 
+ec2_instance_ip = "http://13.127.120.128:8000/"
+
+upload_endpoint = f"{ec2_instance_ip}upload"
+download_file_endpoint = f"{ec2_instance_ip}download_file"
+download_key_endpoint = f"{ec2_instance_ip}download_key"
 
 file_path = "/home/dhaval/Desktop/testfile.txt"
-upload_endpoint = "http://localhost:8000/upload"
-download_file_endpoint = "http://localhost:8000/download_file"
-download_key_endpoint = "http://localhost:8000/download_key"
 download_path = "/home/dhaval/Downloads"
-passphrase = "abcd"
-master_key = base64.urlsafe_b64encode(hashlib.sha256(passphrase.encode("utf-8")).digest())
+
 
 filename = os.path.basename(file_path)
 
@@ -96,81 +97,103 @@ def upload(user_id):
 
     # Get the file hash
     file_hash = get_file_hash(file_path)
-    
-    
 
     # 
     if filename in uploaded_files and uploaded_files[filename]["hash"] == file_hash:
         print(f"[-] File: {filename} already exists")
         return
 
-    # 
-    file_key, encrypted_file_path = encrypt(file_path)
+    try: 
+        # ask the user for passphrase
+        passphrase = input("Enter your passphrase: ")
+        master_key = base64.urlsafe_b64encode(hashlib.sha256(passphrase.encode("utf-8")).digest())
 
-    cipher_suite = Fernet(master_key)
-    encrypted_file_key = cipher_suite.encrypt(file_key).decode("utf-8")
+        file_key, encrypted_file_path = encrypt(file_path)
 
-    with open(encrypted_file_path, "rb") as f:
-        files = {
-            "file": (filename, f)
-        }
-        data = {
-            "encrypted_file_key": encrypted_file_key
-        }
+        cipher_suite = Fernet(master_key)
+        encrypted_file_key = cipher_suite.encrypt(file_key).decode("utf-8")
 
-        r = requests.post(
-            f"{upload_endpoint}/{user_id}",
-            files=files,
-            data=data
-        )
+        with open(encrypted_file_path, "rb") as f:
+            files = {
+                "file": (filename, f)
+            }
+            data = {
+                "encrypted_file_key": encrypted_file_key
+            }
 
-    # Remove the .enc file created after it is sent to the server
-    os.remove(f"{file_path}.enc")
+            r = requests.post(
+                f"{upload_endpoint}/{user_id}",
+                files=files,
+                data=data
+            )
 
-    print(f"[+] File: {filename} successfully uploaded")
+        if r.status_code != 200:
+            print(f"[-] Error: {r.status_code}")
+            return
 
-    # Add the newly uploaded file's mapping and store it
-    file_uuid_mapping = {filename:
-                            { 
-                                "uuid": r.text[1:-1],
-                                "hash": file_hash,
-                                "uploaded_at": datetime.now(timezone.utc).isoformat()
+        # Remove the .enc file created after it is sent to the server
+        os.remove(f"{file_path}.enc")
+
+        print(f"[+] File: {filename} successfully uploaded")
+
+        # Add the newly uploaded file's mapping and store it
+        file_uuid_mapping = {filename:
+                                { 
+                                    "uuid": r.text[1:-1],
+                                    "hash": file_hash,
+                                    "uploaded_at": datetime.now(timezone.utc).isoformat()
+                                }
                             }
-                        }
-    uploaded_files.update(file_uuid_mapping)
+        uploaded_files.update(file_uuid_mapping)
 
-    with open("uploaded_files.json","w") as file:
-        json.dump(uploaded_files, file, indent=4)
+        with open("uploaded_files.json","w") as file:
+            json.dump(uploaded_files, file, indent=4)
+    except Exception as e:
+        print(f"[-] Error: {e}")
 
-#upload(1)
+
 
 def download(user_id, file_name, download_path):
 
-    with open("uploaded_files.json", "r") as file:
-        uploaded_files = json.load(file)
 
-    file_id = uploaded_files[file_name]["uuid"]
     try:
-        response = requests.get(f"{download_file_endpoint}/{user_id}/{file_id}", stream=True)
-        with open(f"{download_path}/{file_name}", "wb") as f:
-            for chunk in response.iter_content(chunk_size=1024):
-                f.write(chunk)
-        print(response.status_code)
+        with open("uploaded_files.json", "r") as file:
+            uploaded_files = json.load(file)
 
-        # Retrieve the encrypted file key
-        r = requests.get(f"{download_key_endpoint}/{user_id}/{file_id}")
-        encrypted_file_key = r.text[1:-1]
+        file_id = uploaded_files[file_name]["uuid"]
 
-        # Decrypt the encrypted file key
-        cipher_suite = Fernet(master_key)
-        decrypted_file_key = cipher_suite.decrypt(encrypted_file_key)
-        
-        # Decrypt the encrypted file
-        decrypt(f"{download_path}/{file_name}", decrypted_file_key)
-        print(f"[+] Successfully downloaded file: {file_name}")
+        try:
+
+            # Ask the user for the passphrase
+            passphrase = input("Enter you passphrase: ")
+            master_key = base64.urlsafe_b64encode(hashlib.sha256(passphrase.encode("utf-8")).digest())
+
+            # Retrieve the encrypted file key
+            r = requests.get(f"{download_key_endpoint}/{user_id}/{file_id}")
+            encrypted_file_key = r.text[1:-1]
+
+            # Decrypt the encrypted file key
+            cipher_suite = Fernet(master_key)
+            decrypted_file_key = cipher_suite.decrypt(encrypted_file_key)
+
+            # Retrieve the encrypted file
+            response = requests.get(f"{download_file_endpoint}/{user_id}/{file_id}", stream=True)
+            with open(f"{download_path}/{file_name}", "wb") as f:
+                for chunk in response.iter_content(chunk_size=1024):
+                    f.write(chunk)
+            print(response.status_code)
+
+            # Decrypt the encrypted file
+            decrypt(f"{download_path}/{file_name}", decrypted_file_key)
+            print(f"[+] Successfully downloaded file: {file_name}")
+        except:
+            print("[-] Error decrypting file")
+            return
 
     except Exception as e:
         print(f"[-] Error: {e}")
+
+#download(2, "testfile.txt", download_path)
     
     
 

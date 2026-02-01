@@ -6,18 +6,58 @@ import hashlib
 import base64
 import json
 from datetime import datetime, timezone
+import click
 
-ec2_instance_ip = "http://13.127.120.128:8000/"
+ec2_instance_ip = "http://65.0.105.46:8000/"
 
 upload_endpoint = f"{ec2_instance_ip}upload"
 download_file_endpoint = f"{ec2_instance_ip}download_file"
 download_key_endpoint = f"{ec2_instance_ip}download_key"
 
-file_path = "/home/dhaval/Desktop/testfile.txt"
+file_path = "/home/dhaval/Desktop/test"
 download_path = "/home/dhaval/Downloads"
 
 
 filename = os.path.basename(file_path)
+
+def login(username, password):
+    global AUTH_TOKEN
+
+    r = requests.post(
+        f"{ec2_instance_ip}auth/login",
+        json={
+            "username": username,
+            "password": password
+        }
+    )
+
+    if r.status_code != 200:
+        raise Exception("Login failed")
+
+    AUTH_TOKEN = r.json()["access_token"]
+
+def register(username, password):
+    r = requests.post(
+        f"{ec2_instance_ip}auth/register",
+        json={
+            "username": username,
+            "password": password
+        }
+    )
+
+    if r.status_code != 200:
+        raise Exception("Registration failed")
+
+    print("User registered successfully")
+
+
+def auth_headers():
+    if not AUTH_TOKEN:
+        raise Exception("Not logged in")
+    return {
+        "Authorization": f"Bearer {AUTH_TOKEN}"
+    }
+
 
 def encrypt(file, duplicate = False, new_file_name = None):
     file_key = os.urandom(32)
@@ -90,7 +130,7 @@ def decrypt(encrypted_file, key):
     except Exception as e:
         raise ValueError("Decryption failed: Data tampered with or wrong parameters.") from e
     
-def upload(user_id):
+def upload():
     # Load the json file containing all the file name to uuid and file hash mappings
     with open("uploaded_files.json", "r") as file:
         uploaded_files = json.load(file)
@@ -122,9 +162,10 @@ def upload(user_id):
             }
 
             r = requests.post(
-                f"{upload_endpoint}/{user_id}",
+                upload_endpoint,
                 files=files,
-                data=data
+                data=data,
+                headers=auth_headers()
             )
 
         if r.status_code != 200:
@@ -153,7 +194,7 @@ def upload(user_id):
 
 
 
-def download(user_id, file_name, download_path):
+def download(file_name, download_path):
 
 
     try:
@@ -169,7 +210,8 @@ def download(user_id, file_name, download_path):
             master_key = base64.urlsafe_b64encode(hashlib.sha256(passphrase.encode("utf-8")).digest())
 
             # Retrieve the encrypted file key
-            r = requests.get(f"{download_key_endpoint}/{user_id}/{file_id}")
+            r = requests.get(f"{download_key_endpoint}/{file_id}", 
+                             headers=auth_headers())
             encrypted_file_key = r.text[1:-1]
 
             # Decrypt the encrypted file key
@@ -177,7 +219,9 @@ def download(user_id, file_name, download_path):
             decrypted_file_key = cipher_suite.decrypt(encrypted_file_key)
 
             # Retrieve the encrypted file
-            response = requests.get(f"{download_file_endpoint}/{user_id}/{file_id}", stream=True)
+            response = requests.get(f"{download_file_endpoint}/{file_id}",
+                                     stream=True,
+                                     headers=auth_headers())
             with open(f"{download_path}/{file_name}", "wb") as f:
                 for chunk in response.iter_content(chunk_size=1024):
                     f.write(chunk)
@@ -193,8 +237,9 @@ def download(user_id, file_name, download_path):
     except Exception as e:
         print(f"[-] Error: {e}")
 
-#download(2, "testfile.txt", download_path)
-    
+
+login("dhaval", "abcd")
+download("test", download_path)
     
 
 

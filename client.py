@@ -8,14 +8,14 @@ import json
 from datetime import datetime, timezone
 import click
 
-ec2_instance_ip = "http://65.0.105.46:8000/"
+ec2_instance_ip = os.getenv("ec2_instance_ip")
 
 upload_endpoint = f"{ec2_instance_ip}upload"
 download_file_endpoint = f"{ec2_instance_ip}download_file"
 download_key_endpoint = f"{ec2_instance_ip}download_key"
 
-file_path = "/home/dhaval/Desktop/test"
-download_path = "/home/dhaval/Downloads"
+file_path = "/"
+download_path = "/"
 
 
 filename = os.path.basename(file_path)

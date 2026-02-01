@@ -185,6 +185,20 @@ async def upload( encrypted_file_key: str = Form(...), file: UploadFile = File(.
     with open(f"{storage_path}/{user_id}/{file_uuid}/key.txt", "w") as key_file:
         key_file.write(encrypted_file_key)
     
+    db = get_db()
+    db.execute(
+        "INSERT INTO files (file_id, owner_user_id, storage_path, created_at) VALUES (?, ?, ?, ?)",
+        (
+            file_uuid,
+            current_user["user_id"],
+            f"{storage_path}/{current_user['user_id']}/{file_uuid}",
+            datetime.utcnow().isoformat()
+        )
+    )
+    db.commit()
+    db.close()
+
+
     return file_uuid
 
 

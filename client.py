@@ -8,23 +8,34 @@ import json
 from datetime import datetime, timezone
 import click
 
-ec2_instance_ip = os.getenv("ec2_instance_ip")
+def get_config(key):
+    with open("config.json", "r") as file:
+        config = json.load(file)
+    if key in config:
+        return config[key]
+    else:
+        raise Exception(f"{key} not found in the config file")
 
-upload_endpoint = f"{ec2_instance_ip}upload"
-download_file_endpoint = f"{ec2_instance_ip}download_file"
-download_key_endpoint = f"{ec2_instance_ip}download_key"
+server_ip = get_config("server_ip")
 
-file_path = "/"
-download_path = "/"
+upload_endpoint = f"{server_ip}/upload"
+download_file_endpoint = f"{server_ip}/download_file"
+download_key_endpoint = f"{server_ip}/download_key"
+login_endpoint = f"{server_ip}/auth/login"
+register_endpoint = f"{server_ip}/auth/register"
 
 
-filename = os.path.basename(file_path)
+# Main Group
+@click.group()
+def cli():
+    pass
 
+@cli.command()
+@click.argument("username")
+@click.argument("password")
 def login(username, password):
-    global AUTH_TOKEN
-
     r = requests.post(
-        f"{ec2_instance_ip}auth/login",
+        login_endpoint,
         json={
             "username": username,
             "password": password
@@ -32,13 +43,28 @@ def login(username, password):
     )
 
     if r.status_code != 200:
-        raise Exception("Login failed")
+        raise Exception("[-] Login failed")
 
+    click.echo("[+] Login Successful")
     AUTH_TOKEN = r.json()["access_token"]
+    
+    # Store the auth token
+    with open("config.json", "r") as file:
+        config = json.load(file)
+    if "auth_token" not in config:
+        print("[-] AUTH TOKEN not found")
+        return
+    config["auth_token"] = AUTH_TOKEN
+    with open("config.json", "w") as file:
+        json.dump(config, file, indent=4)
 
+
+@cli.command()
+@click.argument("username")
+@click.argument("password")
 def register(username, password):
     r = requests.post(
-        f"{ec2_instance_ip}auth/register",
+        register_endpoint,
         json={
             "username": username,
             "password": password
@@ -46,12 +72,14 @@ def register(username, password):
     )
 
     if r.status_code != 200:
-        raise Exception("Registration failed")
+        raise Exception("[-] Registration failed")
 
-    print("User registered successfully")
+    print("[+] User registered successfully")
 
 
 def auth_headers():
+
+    AUTH_TOKEN = get_config("auth_token")
     if not AUTH_TOKEN:
         raise Exception("Not logged in")
     return {
@@ -129,8 +157,10 @@ def decrypt(encrypted_file, key):
         return output_path
     except Exception as e:
         raise ValueError("Decryption failed: Data tampered with or wrong parameters.") from e
-    
-def upload():
+
+@cli.command()
+@click.argument("file_path")
+def upload(file_path):
     # Load the json file containing all the file name to uuid and file hash mappings
     with open("uploaded_files.json", "r") as file:
         uploaded_files = json.load(file)
@@ -138,6 +168,7 @@ def upload():
     # Get the file hash
     file_hash = get_file_hash(file_path)
 
+    filename = os.path.basename(file_path)
     # 
     if filename in uploaded_files and uploaded_files[filename]["hash"] == file_hash:
         print(f"[-] File: {filename} already exists")
@@ -152,7 +183,7 @@ def upload():
 
         cipher_suite = Fernet(master_key)
         encrypted_file_key = cipher_suite.encrypt(file_key).decode("utf-8")
-
+        
         with open(encrypted_file_path, "rb") as f:
             files = {
                 "file": (filename, f)
@@ -160,14 +191,14 @@ def upload():
             data = {
                 "encrypted_file_key": encrypted_file_key
             }
-
+            
             r = requests.post(
                 upload_endpoint,
                 files=files,
                 data=data,
                 headers=auth_headers()
             )
-
+            
         if r.status_code != 200:
             print(f"[-] Error: {r.status_code}")
             return
@@ -193,10 +224,10 @@ def upload():
         print(f"[-] Error: {e}")
 
 
-
-def download(file_name, download_path):
-
-
+@cli.command()
+@click.argument("file_name")
+def download(file_name):
+    download_path = get_config("download_path")
     try:
         with open("uploaded_files.json", "r") as file:
             uploaded_files = json.load(file)
@@ -225,7 +256,7 @@ def download(file_name, download_path):
             with open(f"{download_path}/{file_name}", "wb") as f:
                 for chunk in response.iter_content(chunk_size=1024):
                     f.write(chunk)
-            print(response.status_code)
+            # print(response.status_code)
 
             # Decrypt the encrypted file
             decrypt(f"{download_path}/{file_name}", decrypted_file_key)
@@ -237,9 +268,11 @@ def download(file_name, download_path):
     except Exception as e:
         print(f"[-] Error: {e}")
 
+if __name__ == '__main__':
+    cli()
 
-login("dhaval", "abcd")
-download("test", download_path)
+
+
     
 
 

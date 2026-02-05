@@ -7,14 +7,28 @@ import base64
 import json
 from datetime import datetime, timezone
 import click
+import sys
+
+
+def base_dir():
+    if getattr(sys, 'frozen', False):
+        return os.getcwd()
+    return os.path.dirname(os.path.abspath(__file__))
+
 
 def get_config(key):
-    with open("config.json", "r") as file:
+    config_path = os.path.join(base_dir(), "config.json")
+
+    if not os.path.exists(config_path):
+        raise FileNotFoundError("config.json not found in the current directory")
+
+    with open(config_path, "r") as file:
         config = json.load(file)
-    if key in config:
-        return config[key]
-    else:
-        raise Exception(f"{key} not found in the config file")
+
+    if key not in config:
+        raise KeyError(f"{key} not found in config.json")
+
+    return config[key]
 
 server_ip = get_config("server_ip")
 
@@ -49,13 +63,18 @@ def login(username, password):
     AUTH_TOKEN = r.json()["access_token"]
     
     # Store the auth token
-    with open("config.json", "r") as file:
+    config_path = os.path.join(base_dir(), "config.json")
+
+    if not os.path.exists(config_path):
+        raise FileNotFoundError("config.json not found in the current directory")
+    
+    with open(config_path, "r") as file:
         config = json.load(file)
     if "auth_token" not in config:
         print("[-] AUTH TOKEN not found")
         return
     config["auth_token"] = AUTH_TOKEN
-    with open("config.json", "w") as file:
+    with open(config_path, "w") as file:
         json.dump(config, file, indent=4)
 
 
@@ -162,7 +181,12 @@ def decrypt(encrypted_file, key):
 @click.argument("file_path")
 def upload(file_path):
     # Load the json file containing all the file name to uuid and file hash mappings
-    with open("uploaded_files.json", "r") as file:
+    uploaded_files_path = os.path.join(base_dir(), "uploaded_files.json")
+
+    if not os.path.exists(uploaded_files_path):
+        raise FileNotFoundError("uploaded_files.json not found in the current directory")
+    
+    with open(uploaded_files_path, "r") as file:
         uploaded_files = json.load(file)
 
     # Get the file hash
@@ -218,7 +242,7 @@ def upload(file_path):
                             }
         uploaded_files.update(file_uuid_mapping)
 
-        with open("uploaded_files.json","w") as file:
+        with open(uploaded_files_path,"w") as file:
             json.dump(uploaded_files, file, indent=4)
     except Exception as e:
         print(f"[-] Error: {e}")
@@ -229,7 +253,12 @@ def upload(file_path):
 def download(file_name):
     download_path = get_config("download_path")
     try:
-        with open("uploaded_files.json", "r") as file:
+        uploaded_files_path = os.path.join(base_dir(), "uploaded_files.json")
+
+        if not os.path.exists(uploaded_files_path):
+            raise FileNotFoundError("uploaded_files.json not found in the current directory")
+    
+        with open(uploaded_files_path, "r") as file:
             uploaded_files = json.load(file)
 
         file_id = uploaded_files[file_name]["uuid"]
@@ -268,8 +297,11 @@ def download(file_name):
     except Exception as e:
         print(f"[-] Error: {e}")
 
-if __name__ == '__main__':
+def main():
     cli()
+
+if __name__ == '__main__':
+    main()
 
 
 

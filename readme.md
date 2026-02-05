@@ -86,7 +86,6 @@ This design:
     └── <uuid1>/ # A directory containing all files of user1
     └── <uuid2>/
         └── <file_uuid> # A directory with encrypted file and encrypted file key
-
 ```
 
 ## Command Line Interface
@@ -133,7 +132,6 @@ Uploads a file securely to the server. If the same file name and hash already ex
 
 ```
 python client.py download <file_name>
-
 ```
 
 Downloads the file by looking up the file name mapped UUID in the `uploaded_file.json` file. Download path is set using `config.json`

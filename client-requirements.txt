@@ -1,0 +1,4 @@
+requests
+cryptography
+click
+python-dotenv

@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 import click
 import sys
 
-
 def base_dir():
     if getattr(sys, 'frozen', False):
         return os.getcwd()
@@ -20,7 +19,8 @@ def get_config(key):
     config_path = os.path.join(base_dir(), "config.json")
 
     if not os.path.exists(config_path):
-        raise FileNotFoundError("config.json not found in the current directory")
+        with open(config_path, "w") as f:
+            json.dump({}, f)
 
     with open(config_path, "r") as file:
         config = json.load(file)

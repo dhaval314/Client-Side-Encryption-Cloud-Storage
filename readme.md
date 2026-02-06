@@ -90,14 +90,18 @@ This design:
 
 ## Command Line Interface
 
-All interactions with the client are performed through `client.py`.
+All interactions with the server are performed through the `csecli` binary.
 
- 
+### Prerequisites
+Make sure you have a file named `config.json` in the same directory as the CLI. It must contain these parameters:
+* server_ip
+* download_path
 
+**Note**: The program will create a file `uploaded_file.json`. This file will contain the hash, uuid and filename of all the uploaded files. If you lose this file, you will not be able to download your files.
 ### Help
 
 ```
-python client.py --help
+./csecli --help
 ```
 
 Displays all available commands and options.
@@ -105,13 +109,13 @@ Displays all available commands and options.
 ### Register
 
 ```
-python client.py register <username> <password>
+./csecli register <username> <password>
 ```
 
 ### Login
 
 ```
-python client.py login <username> <password>
+./csecli login <username> <password>
 ```
 
 Authenticates the user with the server and retrieves an access token. The token is stored locally in the `config.json` file and automatically included in future requests.
@@ -121,7 +125,7 @@ Authenticates the user with the server and retrieves an access token. The token 
 ### Upload File
 
 ```
-python client.py upload <file_path>
+./csecli upload <file_path>
 ```
 
 Uploads a file securely to the server. If the same file name and hash already exist locally, the upload is skipped.
@@ -131,10 +135,16 @@ Uploads a file securely to the server. If the same file name and hash already ex
 ### Download File
 
 ```
-python client.py download <file_name>
+./csecli download <file_name>
 ```
 
 Downloads the file by looking up the file name mapped UUID in the `uploaded_file.json` file. Download path is set using `config.json`
+
+## Building from source
+```
+pip install -r client/requirements.txt
+pyinstaller --onefile client/client.py
+```
 
 
 
